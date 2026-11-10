@@ -164,11 +164,10 @@
   function kindFor(item, hard) {
     const lvl = hard ? Math.max(2, st(item.id).lvl) : st(item.id).lvl;
     const n = tokens(item).length;
-    if (lvl <= 0) return "tapP2M";
-    if (lvl === 1) return pick(["tapM2P", "listen", "tapP2M"]);
-    if (lvl === 2) return pick(n >= 3 ? ["build", "tapM2P", "match", "listen"] : ["match", "type", "tapM2P", "listen"]);
-    if (lvl === 3) return pick(n >= 2 ? ["type", "build", "typeListen"] : ["type", "typeListen"]);
-    return pick(n >= 3 ? ["typeListen", "build", "type"] : ["typeListen", "type", "match"]);
+    if (lvl <= 0) return pick(["listen", "tapM2P", "listen"]);
+    if (lvl === 1) return pick(n >= 3 ? ["build", "match", "tapM2P", "listen"] : ["match", "tapM2P", "listen", "type"]);
+    if (lvl === 2) return pick(n >= 2 ? ["type", "build", "typeListen", "match"] : ["type", "typeListen", "match"]);
+    return pick(n >= 3 ? ["typeListen", "build", "type"] : ["typeListen", "type"]);
   }
 
   /* ---------- session ---------- */
@@ -270,13 +269,18 @@
     ids.forEach((id) => {
       const s = { ...st(id) };
       s.seen = true;
-      if (ok) { s.lvl = Math.min(MAX_LVL, s.lvl + 1); s.right = (s.right || 0) + 1; }
+      if (ex.fresh) { s.lvl = ok ? 1 : 0; }
+      else if (ok) { s.lvl = Math.min(MAX_LVL, s.lvl + 1); s.right = (s.right || 0) + 1; }
       else { s.lvl = Math.max(0, s.lvl - 1); s.wrong = (s.wrong || 0) + 1; }
       S.items[id] = s;
       sess.recent.push(id);
     });
     sess.asked += 1;
-    if (ok) {
+    if (ex.fresh) {
+      const it = BY_ID.get(ex.itemId);
+      if (!ok) sess.retry.push({ id: ex.itemId, at: sess.asked + 3 });
+      sess.feedback = { ok, text: it.pt + ": " + meaning(it) };
+    } else if (ok) {
       sess.right += 1;
       const gain = sess.mode === "test" ? 15 : 10;
       sess.xp += gain; S.xp += gain;
@@ -285,6 +289,7 @@
       sess.streakToHeart += 1;
       if (sess.mode !== "test" && sess.streakToHeart >= CORRECT_PER_HEART) { sess.streakToHeart = 0; if (sess.hearts < sess.maxHearts) sess.hearts += 1; }
       sess.feedback = { ok: true, text: pick(t().good) };
+      if (["listen", "tapM2P", "type", "typeListen", "build"].includes(ex.kind)) sess.feedback.text += " " + BY_ID.get(ex.itemId).pt + ": " + meaning(BY_ID.get(ex.itemId));
     } else {
       sess.wrong += 1;
       sess.hearts -= 1;
@@ -433,30 +438,30 @@
     const c = BY_ID.get(id);
     let cls = "";
     if (ex.done) cls = id === ex.itemId ? "good" : id === ex.picked ? "bad" : "";
-    return `<button class="choice ${cls}" data-act="pick" data-id="${id}" ${ex.done ? "disabled" : ""}><span class="ce">${c.emoji}</span><span>${esc(label(c))}</span></button>`;
+    return `<button class="choice ${cls}" data-act="pick" data-id="${id}" ${ex.done ? "disabled" : ""}>${ex.fresh ? `<span class="ce">${c.emoji}</span>` : ""}<span>${esc(label(c))}</span></button>`;
   }
 
   function exerciseView(ex, it) {
     const x = t();
     if (ex.kind === "tapP2M" || ex.kind === "listen") {
       return `<div class="ex">${ex.fresh ? `<p class="kicker">${x.introTitle}</p>` : ""}<h2>${ex.kind === "listen" ? x.pListen : x.pTapMeaning}</h2>
-        ${ex.kind === "tapP2M" ? `<p class="emoji">${it.emoji}</p><p class="pt">${esc(it.pt)}</p>${ex.fresh ? `<p class="meaning">${esc(meaning(it))}</p>` : ""}${it.hint ? `<p class="hint">${x.say} ${esc(it.hint)}</p>` : ""}` : ""}
+        ${ex.kind === "tapP2M" ? `<p class="pt">${esc(it.pt)}</p>${it.hint ? `<p class="hint">${x.say} ${esc(it.hint)}</p>` : ""}` : ""}
         ${speaker(it.pt)}<div class="choices">${ex.choices.map((id) => choiceBtn(ex, id, (c) => meaning(c), it)).join("")}</div></div>`;
     }
     if (ex.kind === "tapM2P") {
-      return `<div class="ex"><h2>${x.pTapPt}</h2><p class="emoji">${it.emoji}</p><p class="pt">${esc(meaning(it))}</p>
+      return `<div class="ex"><h2>${x.pTapPt}</h2><p class="pt">${esc(meaning(it))}</p>
         <div class="choices">${ex.choices.map((id) => choiceBtn(ex, id, (c) => c.pt, it)).join("")}</div></div>`;
     }
     if (ex.kind === "type" || ex.kind === "typeListen") {
       const listen = ex.kind === "typeListen";
       return `<div class="ex"><h2>${listen ? x.pTypeListen : x.pType}</h2>
-        ${listen ? "" : `<p class="emoji">${it.emoji}</p><p class="pt">${esc(meaning(it))}</p>`}${speaker(it.pt)}
+        ${listen ? "" : `<p class="pt">${esc(meaning(it))}</p>`}${speaker(it.pt)}
         <p class="hint">${x.typeHint}</p>
         <input class="type-input ${ex.done ? (norm(ex.value) === norm(it.pt) ? "good" : "bad") : ""}" value="${esc(ex.value)}" placeholder="${x.placeholder}" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="done" ${ex.done ? "disabled" : ""} /></div>`;
     }
     if (ex.kind === "build") {
       const used = new Set(ex.chosen.map((c) => c.k));
-      return `<div class="ex"><h2>${x.pBuild}</h2><p class="emoji">${it.emoji}</p><p class="pt small">${esc(meaning(it))}</p>${speaker(it.pt, false)}
+      return `<div class="ex"><h2>${x.pBuild}</h2><p class="pt small">${esc(meaning(it))}</p>${speaker(it.pt, false)}
         <div class="answer-line ${ex.done ? (norm(ex.chosen.map((c) => c.w).join(" ")) === norm(it.pt) ? "good" : "bad") : ""}">${ex.chosen.map((c, i) => `<button class="tile" data-act="unbuild" data-i="${i}" ${ex.done ? "disabled" : ""}>${esc(c.w)}</button>`).join("")}</div>
         <div class="bank">${ex.bank.map((b) => `<button class="tile ${used.has(b.k) ? "used" : ""}" data-act="build" data-k="${b.k}" ${used.has(b.k) || ex.done ? "disabled" : ""}>${esc(b.w)}</button>`).join("")}</div></div>`;
     }
@@ -465,7 +470,7 @@
         const c = BY_ID.get(id);
         const got = ex.got.includes(id);
         const sel = left && ex.sel === id;
-        return `<button class="choice ${got ? "good" : ""} ${sel ? "picked" : ""}" data-act="${left ? "m-left" : "m-right"}" data-id="${id}" ${got || ex.done ? "disabled" : ""}><span class="ce">${c.emoji}</span><span>${esc(left ? c.pt : meaning(c))}</span></button>`;
+        return `<button class="choice ${got ? "good" : ""} ${sel ? "picked" : ""}" data-act="${left ? "m-left" : "m-right"}" data-id="${id}" ${got || ex.done ? "disabled" : ""}><span>${esc(left ? c.pt : meaning(c))}</span></button>`;
       }).join("");
       return `<div class="ex"><h2>${x.pMatch}</h2><div class="match"><div class="col">${side(ex.left, true)}</div><div class="col">${side(ex.right, false)}</div></div></div>`;
     }
