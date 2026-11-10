@@ -445,7 +445,7 @@
     const x = t();
     if (ex.kind === "tapP2M" || ex.kind === "listen") {
       return `<div class="ex">${ex.fresh ? `<p class="kicker">${x.introTitle}</p>` : ""}<h2>${ex.kind === "listen" ? x.pListen : x.pTapMeaning}</h2>
-        ${ex.kind === "tapP2M" ? `<p class="pt">${esc(it.pt)}</p>${it.hint ? `<p class="hint">${x.say} ${esc(it.hint)}</p>` : ""}` : ""}
+        ${ex.kind === "tapP2M" ? `${ex.fresh ? `<p class="emoji">${it.emoji}</p>` : ""}<p class="pt">${esc(it.pt)}</p>${ex.fresh ? `<p class="meaning">${esc(meaning(it))}</p>` : ""}${it.hint ? `<p class="hint">${x.say} ${esc(it.hint)}</p>` : ""}` : ""}
         ${speaker(it.pt)}<div class="choices">${ex.choices.map((id) => choiceBtn(ex, id, (c) => meaning(c), it)).join("")}</div></div>`;
     }
     if (ex.kind === "tapM2P") {

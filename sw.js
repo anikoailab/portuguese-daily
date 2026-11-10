@@ -1,6 +1,6 @@
 /* Network first so updates arrive, cache fallback so it works offline. Bump VERSION on every release. */
-const VERSION = "ptdaily-v2-3";
-const FILES = ["/portuguese-daily/", "/portuguese-daily/index.html", "/portuguese-daily/style.css?v=4", "/portuguese-daily/content.js?v=4", "/portuguese-daily/app.js?v=4", "/portuguese-daily/manifest.webmanifest", "/portuguese-daily/favicon.svg", "/portuguese-daily/icon-192.png", "/portuguese-daily/icon-512.png", "/portuguese-daily/apple-touch-icon.png"];
+const VERSION = "ptdaily-v2-4";
+const FILES = ["/portuguese-daily/", "/portuguese-daily/index.html", "/portuguese-daily/style.css?v=5", "/portuguese-daily/content.js?v=5", "/portuguese-daily/app.js?v=5", "/portuguese-daily/manifest.webmanifest", "/portuguese-daily/favicon.svg", "/portuguese-daily/icon-192.png", "/portuguese-daily/icon-512.png", "/portuguese-daily/apple-touch-icon.png"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(VERSION).then((c) => c.addAll(FILES)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== VERSION).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener("fetch", (e) => {
