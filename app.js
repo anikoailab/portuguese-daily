@@ -142,7 +142,7 @@
   function build(item, kind, pool) {
     const base = { itemId: item.id, kind, done: false };
     if (kind === "intro") return base;
-    if (kind === "tapP2M" || kind === "listen") return { ...base, choices: choiceSet(item), picked: null };
+    if (kind === "tapP2M" || kind === "listen") return { ...base, choices: choiceSet(item), picked: null, fresh: false };
     if (kind === "tapM2P") return { ...base, choices: choiceSet(item), picked: null };
     if (kind === "type" || kind === "typeListen") return { ...base, value: "" };
     if (kind === "build") {
@@ -158,6 +158,8 @@
     }
     return base;
   }
+
+  function freshEx(item) { return { ...build(item, "tapP2M"), fresh: true }; }
 
   function kindFor(item, hard) {
     const lvl = hard ? Math.max(2, st(item.id).lvl) : st(item.id).lvl;
@@ -241,7 +243,7 @@
       return build(it, kindFor(it), items);
     }
     // practice: introduce new words in small batches
-    if (sess.introQ.length) return build(BY_ID.get(sess.introQ.shift()), "intro");
+    if (sess.introQ.length) return freshEx(BY_ID.get(sess.introQ.shift()));
     const pool = poolItems();
     const learning = pool.filter((i) => st(i.id).lvl < 4);
     const fresh = sess.unit.items.filter((i) => !sess.introduced.has(i.id));
@@ -249,7 +251,7 @@
       const batch = fresh.slice(0, pool.length === 0 ? 3 : 2);
       batch.forEach((i) => sess.introduced.add(i.id));
       sess.introQ = batch.map((i) => i.id);
-      return build(BY_ID.get(sess.introQ.shift()), "intro");
+      return freshEx(BY_ID.get(sess.introQ.shift()));
     }
     // 25% spaced review of earlier units
     const idx = unitIndex(sess.unit.id);
@@ -303,16 +305,6 @@
 
   function advance() {
     if (!sess) return;
-    if (sess.ex.kind === "intro") { // intro cards never grade
-      const id = sess.ex.itemId;
-      S.items[id] = { ...st(id), seen: true };
-      sess.recent.push(id);
-      save();
-      sess.ex = build(BY_ID.get(id), "tapP2M");
-      sess.feedback = null;
-      render(); autoSpeak();
-      return;
-    }
     sess.feedback = null;
     if (sess.hearts <= 0) return finish("fail");
     if (sess.mode === "test") {
@@ -352,7 +344,7 @@
   function autoSpeak() {
     if (!sess || !sess.ex) return;
     const ex = sess.ex, it = BY_ID.get(ex.itemId);
-    if (["intro", "tapP2M", "listen", "typeListen"].includes(ex.kind)) setTimeout(() => speak(it.pt), 120);
+    if (["tapP2M", "listen", "typeListen"].includes(ex.kind)) setTimeout(() => speak(it.pt), 120);
   }
 
   /* ---------- rendering ---------- */
@@ -418,10 +410,8 @@
     const hearts = Array.from({ length: sess.maxHearts }, (_, i) => `<span class="${i < sess.hearts ? "on" : ""}">♥</span>`).join("");
     const label = isTest ? x.test : fmt(Math.max(0, sess.targetSec - sess.elapsed));
     const fb = sess.feedback;
-    const body = ex.kind === "intro" ? introView(it) : exerciseView(ex, it);
-    const footer = ex.kind === "intro"
-      ? `<footer class="bar"><button class="primary" data-act="next">${x.gotIt}</button></footer>`
-      : fb ? `<footer class="bar ${fb.ok ? "good" : "bad"}"><p class="fb">${esc(fb.text)}</p><button class="primary" data-act="next">${x.next}</button></footer>`
+    const body = exerciseView(ex, it);
+    const footer = fb ? `<footer class="bar ${fb.ok ? "good" : "bad"}"><p class="fb">${esc(fb.text)}</p><button class="primary" data-act="next">${x.next}</button></footer>`
         : ex.kind === "type" || ex.kind === "typeListen" ? `<footer class="bar"><button class="primary" data-act="submit-type" ${ex.value.trim() ? "" : "disabled"}>${x.check}</button></footer>`
           : ex.kind === "build" ? `<footer class="bar"><button class="primary" data-act="submit-build" ${ex.chosen.length ? "" : "disabled"}>${x.check}</button></footer>` : "";
     return `<main class="app session">
@@ -449,8 +439,8 @@
   function exerciseView(ex, it) {
     const x = t();
     if (ex.kind === "tapP2M" || ex.kind === "listen") {
-      return `<div class="ex"><h2>${ex.kind === "listen" ? x.pListen : x.pTapMeaning}</h2>
-        ${ex.kind === "tapP2M" ? `<p class="emoji">${it.emoji}</p><p class="pt">${esc(it.pt)}</p>${it.hint ? `<p class="hint">${x.say} ${esc(it.hint)}</p>` : ""}` : ""}
+      return `<div class="ex">${ex.fresh ? `<p class="kicker">${x.introTitle}</p>` : ""}<h2>${ex.kind === "listen" ? x.pListen : x.pTapMeaning}</h2>
+        ${ex.kind === "tapP2M" ? `<p class="emoji">${it.emoji}</p><p class="pt">${esc(it.pt)}</p>${ex.fresh ? `<p class="meaning">${esc(meaning(it))}</p>` : ""}${it.hint ? `<p class="hint">${x.say} ${esc(it.hint)}</p>` : ""}` : ""}
         ${speaker(it.pt)}<div class="choices">${ex.choices.map((id) => choiceBtn(ex, id, (c) => meaning(c), it)).join("")}</div></div>`;
     }
     if (ex.kind === "tapM2P") {
